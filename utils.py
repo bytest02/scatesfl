@@ -1,37 +1,13 @@
-import pickle
 import json
 import os
+from ctypes import cdll
 
 import requests
 
-import numpy as np
-import torch
-
-from Crypto.Hash import SHA256
-
-scaling = 0x000000ffffffffff # 2^40-1
-
-max_random_number = 0xfffffff
-
-# for masking and precisely hashing purpose
-
-def intermediate_to_weights(ir):
-    weights = {}
-    for key in list(ir.keys()):
-        uw = ir[key].astype(np.float64) / scaling   
-        weights[key] = torch.from_numpy(uw)     
-    return weights
-
-def gen_maskers(np_weights):
-    rnm = {}
-    for key in list(np_weights.keys()):
-        rnm[key] = np.random.randint(0, max_random_number, np_weights[key].shape)
-    return rnm
-
-def calculate_MAC(s_i, theta):
-    sha256 = SHA256.new(pickle.dumps(s_i))
-    sha256.update(pickle.dumps(theta))
-    return sha256.digest().hex()
+parent_dir = os.path.dirname(os.path.abspath(__file__))
+cpp_executable = os.path.join(parent_dir,".", "AesModeCTR")
+file_path2 = os.path.join(parent_dir, "aggregation.so")
+aggregation_lib = cdll.LoadLibrary(file_path2) # Load the external C code
 
 def load_json(filename, encoding='utf-8'):
     try:

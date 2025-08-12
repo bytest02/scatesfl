@@ -1,0 +1,8 @@
+{
+    "num_users": [100,200], 
+    "num_assisnode" : [5],
+    "data_size": [16000],
+    "epochs" : 5,
+    "telegram_bot_token":"",
+    "enable_signature": true
+}
