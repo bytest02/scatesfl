@@ -1,35 +1,54 @@
+'''
+Author: Bo Yan bo.yan@csiro.au
+Date: 2024-08-20 15:31:14
+LastEditors: Bo Yan bo.yan@csiro.au
+LastEditTime: 2024-08-29 11:53:40
+FilePath: /scates/src/gen_report.py
+'''
 import csv
 from datetime import datetime
 from statistics import mean
 
 def gen_report(context_list):
-    filename = context_list[0]['prefix'] + datetime.now().strftime("%d%m%Y-%H-%M") + '-latencies.csv'
+    gen_performace_report(context_list)
+    gen_accuracy_report(context_list)
+
+def gen_performace_report(context_list):
+    filename = context_list[0]['prefix'] + datetime.now().strftime("-%M-%H-%d%m%Y") + '-latencies.csv'
     with open(filename, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile, delimiter=',',quotechar='|', quoting=csv.QUOTE_MINIMAL)
-        writer.writerow( ['user_amount', 'data_size', 'dropout', 'fog_node_amount', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'pmask'] )
+        writer.writerow( ['user_amount', 'fog_node_amount', 'round_amount', 'total-user-running',
+                          'total-aggregator-running', 'total-fognodes-running'] )
         for context in context_list:
             perf = context['perf']
             config = perf.config
-            user_node_data = [config['num_users'], config['data_size'], config['dropout'], config['num_fognode']]
-            data_row = gen_data_rows(perf, user_node_data)
-            writer.writerow( data_row ) 
+            data_row = [config['num_users'], config['num_fognode'], config['epochs']]  
+            data_row.extend(collect_latency_data(perf))
+            writer.writerow( data_row )
 
-def gen_data_rows(perf, user_node_data):
-    data_collect = {}
-    for item in perf.repo:
-        if item['iter'] != '0':
-            rid = item['rid']
-            if rid not in data_collect:
-                data_collect[rid] =  []
-            data_collect[rid].append(item)
-    return user_node_data + [get_average(data_collect['p1'])//1000,
-                             get_average(data_collect['p2'])//1000,
-                             get_average(data_collect['p3'])//1000,
-                             get_average(data_collect['p4'])//1000,
-                             get_average(data_collect['p5'])//1000,
-                             get_average(data_collect['p6'])//1000,
-                             get_average(data_collect['pmask'])//1000
-                             ]       
+def sum_per_items(repo, prefix):
+    ''' sum the values of items in repo with the same prefix
+        return: the sum of the values in microsecond
+    '''
+    return sum(item['v'] for item in repo if item['rid'].startswith(prefix)) //1000
 
-def get_average(dlist):
-    return int(mean([x['v'] for x in dlist]))
+def collect_latency_data(perf):
+    return [
+        sum_per_items(perf.repo, 'pu'),  # collect user running time
+        sum_per_items(perf.repo, 'pa'),  # collect aggregator running time
+        sum_per_items(perf.repo, 'pf')   # collect fog nodes running time
+    ]
+def gen_accuracy_report(context_list):
+    filename = context_list[0]['prefix'] + datetime.now().strftime("-%M-%H-%d%m%Y") + '-acc.csv'
+    with open(filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile, delimiter=',',quotechar='|', quoting=csv.QUOTE_MINIMAL)
+        writer.writerow( ['user_amount', 'fog_node_amount', 'iteration', 'accuracy'] )
+        for context in context_list:
+            perf = context['perf']
+            config = perf.config
+            for item in [r for r in perf.repo if r['rid'] == 'accuracy']:
+                acc = item['v']
+                iter = item['iter'] + 1
+                if iter % 10 == 0:
+                    data_row = [config['num_users'], config['num_fognode'], iter , f'{acc:.1f}']
+                    writer.writerow( data_row )        

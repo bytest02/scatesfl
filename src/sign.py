@@ -1,29 +1,26 @@
 from datetime import datetime
 import pickle
-import hashlib
 
-from coincurve.keys import PrivateKey
-from coincurve.utils import verify_signature
+from Crypto.Hash import SHA256
+from Crypto.Signature import pss
+from Crypto.PublicKey import RSA
 
-def generate_sign_key_pair():
-    private_key_sign = PrivateKey()
-    return private_key_sign.public_key, private_key_sign
+def generate_RSA_key_pair():
+    private_key = RSA.generate(2048)
+    return private_key.publickey(), private_key
 
 def get_msg_timestamp():
     return datetime.now().isoformat()
 
-def verify_payload_signature(public_key, pay_load, signature):
-    if not verify_signature(signature, hash_payload(pay_load), public_key):
-        raise ValueError("Signature verification failed")
+def verify_signature(public_key, pay_load, signature):
+    verifier = pss.new(public_key)
+    sha256 = SHA256.new(pickle.dumps(pay_load))
+    verifier.verify(sha256, signature)
 
 def verify_signature_in_message(message, public_keys):
     pay_load = message['pay_load']
     from_name = pay_load['from']
-    verify_payload_signature(public_keys[from_name], pay_load, message['signature'])
+    verify_signature(public_keys[from_name], pay_load, message['signature'])
 
-def hash_payload(pay_load):
-    return hashlib.sha256(pickle.dumps(pay_load)).digest()
-
-def sign_payload(private_key, pay_load):
-    bhash = hash_payload(pay_load)
-    return private_key.sign(bhash)
+def sign_payload(signer, pay_load):
+    return signer.sign(SHA256.new(pickle.dumps(pay_load)))

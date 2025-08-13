@@ -1,7 +1,6 @@
 import copy
 import pickle
 import json
-import time
 
 import torch
 import numpy as np
@@ -15,7 +14,7 @@ class FogNode(object):
     def __init__(self, name, private_key, public_keys):
         self.name = name
         self.collected = [] 
-        self.signer = private_key
+        self.signer = pss.new(private_key)
         self.public_keys = public_keys
         self.F = set()
 
@@ -97,9 +96,8 @@ class FogNode(object):
     
 class AggregatorNode(FogNode):
     
-    def verify_and_aggregate_partial_sig(self, other_aggregated, intersected, perf_collector):
+    def verify_and_aggregate_partial_sig(self, other_aggregated, intersected):
         server_aggregated, iter = self.partial_aggregate(intersected)
-        p4_start = time.time_ns() 
         for paggr in other_aggregated:
             verify_signature_in_message(paggr, self.public_keys)
             local_w = paggr['pay_load']['partial']
@@ -111,8 +109,6 @@ class AggregatorNode(FogNode):
         # averaging the weights from the intersected clients
         for key in list(server_aggregated.keys()):
             server_aggregated[key] = server_aggregated[key] // len(intersected)  
-        if iter > 0: # iteration 0 is used as warm-up
-            perf_collector.collect({'iter': str(iter), 'rid': 'p4', 'v': time.time_ns() - p4_start})         
         return server_aggregated
     
     def calculate_Vi(self, theta, intersected):

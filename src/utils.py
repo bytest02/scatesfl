@@ -2,8 +2,6 @@ import pickle
 import json
 import os
 
-import requests
-
 import numpy as np
 import torch
 
@@ -47,15 +45,3 @@ def read_config(logger):
         config_file = 'config.json'
     logger.info(f'Loading config file: {config_file}')
     return load_json(config_file)
-
-def send_telegram_message(bot_token, chat_id, message):
-    url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
-    payload = {
-        'chat_id': chat_id,
-        'text': message
-    }
-    response = requests.post(url, data=payload)
-    if response.status_code == 200:
-        print('Message sent successfully')
-    else:
-        print(f'Failed to send message: {response.status_code}')

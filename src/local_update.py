@@ -1,5 +1,4 @@
 import pickle
-import time
 
 import torch
 from torch import nn
@@ -25,7 +24,7 @@ def calculate_accuracy(fx, y):
 
 class LocalUpdate(object):
     def __init__(self, idx, client_name, lr, device, dataset_train = None, dataset_test = None, idxs = None,
-                 idxs_test = None, private_key = None, config = None):
+                 idxs_test = None, private_key = None):
         self.idx = idx
         self.device = device
         self.lr = lr
@@ -34,13 +33,46 @@ class LocalUpdate(object):
         self.ldr_train = DataLoader(DatasetSplit(dataset_train, idxs), batch_size = 256*4, shuffle = True)
         self.ldr_test = DataLoader(DatasetSplit(dataset_test, idxs_test), batch_size = 256*4, shuffle = True)
         self.name = client_name
-        self.signer = private_key
-        self.config = config
+        if private_key:
+            self.signer = pss.new(private_key)
+        else:
+            self.signer = None
 
     # For training
     def train(self, net):
-        net  = {'features.0.weight' : np.full((self.config['data_size']), 0.1, dtype="float64")}
-        return net,0.1,0.1
+        net.train()
+        optimizer = torch.optim.Adam(net.parameters(), lr = self.lr)
+        
+        epoch_acc = []
+        epoch_loss = []
+        for iter in range(self.local_ep):
+            batch_acc = []
+            batch_loss = []
+            
+            for batch_idx, (images, labels) in enumerate(self.ldr_train):
+                images, labels = images.to(self.device), labels.to(self.device)
+                optimizer.zero_grad()
+                #---------forward prop-------------
+                fx = net(images)
+                
+                # calculate loss
+                loss = self.loss_func(fx, labels)
+                # calculate accuracy
+                acc = calculate_accuracy(fx, labels)
+                
+                #--------backward prop--------------
+                loss.backward()
+                optimizer.step()
+                              
+                batch_loss.append(loss.item())
+                batch_acc.append(acc.item())
+            
+            
+            print('Client{} Train => Local Epoch: {}  \tAcc: {:.3f} \tLoss: {:.4f}'.format(self.idx,
+                        iter, acc.item(), loss.item()))
+            epoch_loss.append(sum(batch_loss)/len(batch_loss))
+            epoch_acc.append(sum(batch_acc)/len(batch_acc))
+        return net.state_dict(), sum(epoch_loss) / len(epoch_loss), sum(epoch_acc) / len(epoch_acc)
     
     # For testing
     def evaluate(self, net):
@@ -102,32 +134,28 @@ class LocalUpdate(object):
         wkeys = list(w.keys())
         collector_size = len(collectors)
         for key in wkeys:
-            sw[key] = (w[key] * scaling / collector_size).astype(np.int64)
+            sw[key] = (w[key].numpy() * scaling / collector_size).astype(np.int64)
         # masking for fog nodes
         masked = self.mask_for_fog_nodes(sw, iter, collectors) 
         return masked, loss_train, acc_train           
     
-    def train_and_mask(self, theta, msgs, iter, collectors, channels, perfcollector):
+    def train_and_mask(self, theta, msgs, iter, collectors, channels):
         # verify new messages and train the model
         try:
-            p6_start = time.time_ns()
             verify_intersections(msgs)
             s_i = recover_si(msgs[0], theta)
             self.verify_MAC(s_i, theta, msgs[0]['S_i'])
             verify_S_from_fog_nodes(msgs)
-            perfcollector.collect({'iter': str(iter), 'rid': 'p6', 'v': time.time_ns() - p6_start}) 
-            #wt = intermediate_to_weights(theta)
-            net = None # create_LeNet5_model(self.device, channels, wt)
+            wt = intermediate_to_weights(theta)
+            net = create_LeNet5_model(self.device, channels, wt)
             w, loss_train, acc_train = self.train(net)
-            pmask_start = time.time_ns()
             sw = {}
             wkeys = list(w.keys())
             collector_size = len(collectors)
             for key in wkeys:
-                sw[key] = (w[key] * scaling / collector_size).astype(np.int64)
+                sw[key] = (w[key].numpy() * scaling / collector_size).astype(np.int64)
             # masking for fog nodes
             masked = self.mask_for_fog_nodes(sw, iter, collectors) 
-            perfcollector.collect({'iter': str(iter), 'rid': 'pmask', 'v': time.time_ns() - pmask_start}) 
             return masked, loss_train, acc_train           
         except Exception as e:
             print(f'Error: {e}')
