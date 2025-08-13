@@ -212,7 +212,6 @@ def main():
     header = sys_config.get("completed_notice_header", "")
     if len(header) > 0:
         complete_msg = f'{header}:{complete_msg}'
-    send_telegram_message(sys_config['telegram_bot_token'], sys_config['chat_id'], complete_msg)
 
 if __name__ == "__main__":
     main()
