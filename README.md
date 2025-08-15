@@ -28,3 +28,4 @@ The following configurations can be modified in the config.json file:
 * "epochs": the number of iterations to run the federated learning between the users, intermediate servers, and aggregators
 
 Change dataset between MNIST and CIFAR-10 can be done at the line 44 in the flapp.py.
+  
